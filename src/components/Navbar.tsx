@@ -1,16 +1,30 @@
-import { Hotel, User, Menu } from "lucide-react";
+import { Hotel, User, Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   
   const isActive = (path: string) => location.pathname === path;
+  
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
   
   const navLinks = [
     { path: "/", label: "Home" },
@@ -47,13 +61,41 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" className="hidden md:flex border-border">
-              <User className="h-4 w-4 mr-2" />
-              Sign In
-            </Button>
-            <Button size="sm" className="hidden md:flex bg-secondary hover:bg-secondary-hover text-secondary-foreground">
-              Register
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="hidden md:flex border-border">
+                    <User className="h-4 w-4 mr-2" />
+                    {user.email}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="hidden md:flex border-border"
+                  onClick={() => navigate("/auth")}
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  Sign In
+                </Button>
+                <Button 
+                  size="sm" 
+                  className="hidden md:flex bg-secondary hover:bg-secondary-hover text-secondary-foreground"
+                  onClick={() => navigate("/auth")}
+                >
+                  Register
+                </Button>
+              </>
+            )}
 
             {/* Mobile Menu */}
             <Sheet>
@@ -76,13 +118,33 @@ export function Navbar() {
                     </Link>
                   ))}
                   <div className="flex flex-col gap-3 pt-4 border-t border-border">
-                    <Button variant="outline" className="w-full border-border">
-                      <User className="h-4 w-4 mr-2" />
-                      Sign In
-                    </Button>
-                    <Button className="w-full bg-secondary hover:bg-secondary-hover text-secondary-foreground">
-                      Register
-                    </Button>
+                    {user ? (
+                      <Button 
+                        variant="outline" 
+                        className="w-full border-border"
+                        onClick={handleSignOut}
+                      >
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Sign Out
+                      </Button>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          className="w-full border-border"
+                          onClick={() => navigate("/auth")}
+                        >
+                          <User className="h-4 w-4 mr-2" />
+                          Sign In
+                        </Button>
+                        <Button 
+                          className="w-full bg-secondary hover:bg-secondary-hover text-secondary-foreground"
+                          onClick={() => navigate("/auth")}
+                        >
+                          Register
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </SheetContent>
