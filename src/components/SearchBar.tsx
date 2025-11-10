@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Calendar, MapPin, Users, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,12 +8,24 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function SearchBar() {
+  const navigate = useNavigate();
   const [checkIn, setCheckIn] = useState<Date>();
   const [checkOut, setCheckOut] = useState<Date>();
   const [guests, setGuests] = useState(2);
   const [city, setCity] = useState("");
+
+  const handleSearch = () => {
+    if (!city.trim()) {
+      toast.error("Please enter a city");
+      return;
+    }
+    
+    // Navigate to hotels page with city filter
+    navigate(`/hotels?city=${encodeURIComponent(city.trim())}`);
+  };
 
   return (
     <div className="w-full max-w-5xl mx-auto bg-card rounded-2xl shadow-luxury p-6 md:p-8 border border-border">
@@ -129,6 +142,7 @@ export function SearchBar() {
 
       <Button 
         className="w-full mt-6 h-14 text-lg font-semibold bg-secondary hover:bg-secondary-hover text-secondary-foreground shadow-luxury transition-all hover:scale-[1.02]"
+        onClick={handleSearch}
       >
         <Search className="mr-2 h-5 w-5" />
         Search Hotels

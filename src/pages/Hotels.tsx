@@ -1,92 +1,139 @@
-import { useState } from "react";
-import { Navbar } from "@/components/Navbar";
-import { HotelCard } from "@/components/HotelCard";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
-import deluxeRoom from "@/assets/room-deluxe.jpg";
-import beachHotel from "@/assets/hotel-beach.jpg";
-import businessRoom from "@/assets/room-business.jpg";
+import { Button } from "@/components/ui/button";
+import { HotelCard } from "@/components/HotelCard";
+import { Navbar } from "@/components/Navbar";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
-const allHotels = [
-  {
-    id: 1,
-    name: "Grand Taj Palace",
-    city: "Mumbai, India",
-    rating: 5.0,
-    price: 3500,
-    image: deluxeRoom,
-    amenities: ["wifi", "parking", "gym", "restaurant"],
-  },
-  {
-    id: 2,
-    name: "Delhi Crown Plaza",
-    city: "Delhi, India",
-    rating: 4.0,
-    price: 3000,
-    image: businessRoom,
-    amenities: ["wifi", "parking", "restaurant"],
-  },
-  {
-    id: 3,
-    name: "Bangalore Tech Hotel",
-    city: "Bangalore, India",
-    rating: 3.5,
-    price: 2500,
-    image: businessRoom,
-    amenities: ["wifi", "parking"],
-  },
-  {
-    id: 4,
-    name: "Goa Beach Resort",
-    city: "Goa, India",
-    rating: 4.5,
-    price: 4500,
-    image: beachHotel,
-    amenities: ["wifi", "parking", "gym", "restaurant"],
-  },
-  {
-    id: 5,
-    name: "Royal Jaipur Hotel",
-    city: "Jaipur, India",
-    rating: 4.0,
-    price: 3800,
-    image: deluxeRoom,
-    amenities: ["wifi", "parking", "restaurant"],
-  },
-];
+const amenitiesList = ["wifi", "parking", "gym", "restaurant", "pool", "spa"];
 
-const cities = ["All Cities", "Mumbai", "Delhi", "Bangalore", "Goa", "Jaipur"];
-const amenitiesList = ["wifi", "parking", "gym", "restaurant"];
-
-export default function Hotels() {
-  const [priceRange, setPriceRange] = useState([0, 15000]);
-  const [selectedCity, setSelectedCity] = useState("All Cities");
+const Hotels = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [priceRange, setPriceRange] = useState([0, 10000]);
+  const [selectedCity, setSelectedCity] = useState(searchParams.get("city") || "All Cities");
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("rating");
 
-  const filteredHotels = allHotels
-    .filter((hotel) => {
-      const cityMatch = selectedCity === "All Cities" || hotel.city.includes(selectedCity);
-      const priceMatch = hotel.price >= priceRange[0] && hotel.price <= priceRange[1];
-      const amenitiesMatch =
-        selectedAmenities.length === 0 ||
-        selectedAmenities.every((amenity) => hotel.amenities.includes(amenity));
-      return cityMatch && priceMatch && amenitiesMatch;
-    })
-    .sort((a, b) => {
-      if (sortBy === "price-low") return a.price - b.price;
-      if (sortBy === "price-high") return b.price - a.price;
-      if (sortBy === "rating") return b.rating - a.rating;
-      return 0;
-    });
+  // Fetch cities from database
+  const { data: cities = [] } = useQuery({
+    queryKey: ["cities"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cities")
+        .select("city_name")
+        .order("city_name");
+      if (error) throw error;
+      return ["All Cities", ...data.map(c => c.city_name)];
+    },
+  });
+
+  // Fetch hotels with related data
+  const { data: hotels = [], isLoading } = useQuery({
+    queryKey: ["hotels", selectedCity, priceRange, selectedAmenities, sortBy],
+    queryFn: async () => {
+      let query = supabase
+        .from("hotels")
+        .select(`
+          id,
+          hotel_name,
+          star_rating,
+          image_url,
+          cities!inner (
+            city_name,
+            state,
+            country
+          ),
+          rooms!inner (
+            price_per_night
+          ),
+          hotel_amenities (
+            amenities (
+              amenity_name
+            )
+          )
+        `);
+
+      // Filter by city
+      if (selectedCity !== "All Cities") {
+        query = query.eq("cities.city_name", selectedCity);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Transform data to match component expectations
+      const transformedHotels = data.map((hotel: any) => {
+        const minPrice = Math.min(...hotel.rooms.map((r: any) => r.price_per_night));
+        const amenitiesSet = new Set<string>();
+        if (hotel.hotel_amenities) {
+          hotel.hotel_amenities.forEach((ha: any) => {
+            if (ha.amenities?.amenity_name) {
+              amenitiesSet.add(ha.amenities.amenity_name);
+            }
+          });
+        }
+        const amenities = Array.from(amenitiesSet);
+        
+        return {
+          id: hotel.id,
+          name: hotel.hotel_name,
+          city: `${hotel.cities.city_name}, ${hotel.cities.state}`,
+          rating: hotel.star_rating || 5,
+          price: minPrice,
+          image: hotel.image_url,
+          amenities,
+        };
+      });
+
+      // Filter by price and amenities
+      let filtered = transformedHotels.filter((hotel: any) => {
+        const priceMatch = hotel.price >= priceRange[0] && hotel.price <= priceRange[1];
+        const amenitiesMatch = selectedAmenities.length === 0 || 
+          selectedAmenities.every(amenity => hotel.amenities.includes(amenity));
+        return priceMatch && amenitiesMatch;
+      });
+
+      // Sort
+      filtered.sort((a: any, b: any) => {
+        if (sortBy === "rating") return b.rating - a.rating;
+        if (sortBy === "price-low") return a.price - b.price;
+        if (sortBy === "price-high") return b.price - a.price;
+        return 0;
+      });
+
+      return filtered;
+    },
+  });
+
+  // Update city from URL params
+  useEffect(() => {
+    const cityParam = searchParams.get("city");
+    if (cityParam && cityParam !== selectedCity) {
+      setSelectedCity(cityParam);
+    }
+  }, [searchParams]);
 
   const toggleAmenity = (amenity: string) => {
-    setSelectedAmenities((prev) =>
-      prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity]
+    setSelectedAmenities(prev =>
+      prev.includes(amenity)
+        ? prev.filter(a => a !== amenity)
+        : [...prev, amenity]
     );
+  };
+
+  const resetFilters = () => {
+    setPriceRange([0, 10000]);
+    setSelectedCity("All Cities");
+    setSelectedAmenities([]);
+    setSortBy("rating");
+    setSearchParams({});
   };
 
   return (
@@ -99,7 +146,7 @@ export default function Hotels() {
         <div className="grid lg:grid-cols-4 gap-8">
           {/* Filters Sidebar */}
           <aside className="lg:col-span-1 space-y-6">
-            <div className="bg-card rounded-xl p-6 border border-border shadow-soft">
+            <Card className="bg-card rounded-xl p-6 border border-border shadow-soft">
               <h2 className="text-xl font-bold text-foreground mb-6">Filters</h2>
 
               {/* City Filter */}
@@ -128,7 +175,7 @@ export default function Hotels() {
                   value={priceRange}
                   onValueChange={setPriceRange}
                   min={0}
-                  max={15000}
+                  max={10000}
                   step={500}
                   className="py-4"
                 />
@@ -172,42 +219,48 @@ export default function Hotels() {
               <Button
                 variant="outline"
                 className="w-full mt-6 border-border"
-                onClick={() => {
-                  setSelectedCity("All Cities");
-                  setPriceRange([0, 15000]);
-                  setSelectedAmenities([]);
-                  setSortBy("rating");
-                }}
+                onClick={resetFilters}
               >
                 Reset Filters
               </Button>
-            </div>
+            </Card>
           </aside>
 
           {/* Hotels Grid */}
           <div className="lg:col-span-3">
             <div className="mb-6">
-              <p className="text-muted-foreground">
-                {filteredHotels.length} hotel{filteredHotels.length !== 1 ? "s" : ""} found
-              </p>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2">
-              {filteredHotels.map((hotel) => (
-                <HotelCard key={hotel.id} hotel={hotel} />
-              ))}
-            </div>
-
-            {filteredHotels.length === 0 && (
-              <div className="text-center py-16">
-                <p className="text-muted-foreground text-lg">
-                  No hotels found matching your criteria. Try adjusting your filters.
+              {isLoading ? (
+                <p className="text-muted-foreground">Loading hotels...</p>
+              ) : (
+                <p className="text-muted-foreground">
+                  {hotels.length} hotel{hotels.length !== 1 ? "s" : ""} found
                 </p>
+              )}
+            </div>
+
+            {isLoading ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {hotels.map((hotel) => (
+                    <HotelCard key={hotel.id} hotel={hotel} />
+                  ))}
+                </div>
+                {hotels.length === 0 && (
+                  <p className="text-center text-muted-foreground py-12">
+                    No hotels found matching your criteria.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default Hotels;

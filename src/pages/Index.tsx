@@ -2,40 +2,9 @@ import { SearchBar } from "@/components/SearchBar";
 import { HotelCard } from "@/components/HotelCard";
 import { Navbar } from "@/components/Navbar";
 import heroImage from "@/assets/hero-hotel.jpg";
-import beachHotel from "@/assets/hotel-beach.jpg";
-import deluxeRoom from "@/assets/room-deluxe.jpg";
-import businessRoom from "@/assets/room-business.jpg";
-import { Star, Award, Shield, Headphones } from "lucide-react";
-
-const featuredHotels = [
-  {
-    id: 1,
-    name: "Grand Taj Palace",
-    city: "Mumbai, India",
-    rating: 5.0,
-    price: 3500,
-    image: deluxeRoom,
-    amenities: ["wifi", "parking", "gym", "restaurant"],
-  },
-  {
-    id: 2,
-    name: "Goa Beach Resort",
-    city: "Goa, India",
-    rating: 4.5,
-    price: 4500,
-    image: beachHotel,
-    amenities: ["wifi", "parking", "restaurant"],
-  },
-  {
-    id: 3,
-    name: "Delhi Crown Plaza",
-    city: "Delhi, India",
-    rating: 4.0,
-    price: 3000,
-    image: businessRoom,
-    amenities: ["wifi", "parking", "gym", "restaurant"],
-  },
-];
+import { Star, Shield, HeadphonesIcon, Loader2, Award } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const features = [
   {
@@ -54,13 +23,64 @@ const features = [
     description: "Your payment information is safe with us",
   },
   {
-    icon: Headphones,
+    icon: HeadphonesIcon,
     title: "24/7 Support",
     description: "We're here to help, anytime you need us",
   },
 ];
 
-export default function Index() {
+const Index = () => {
+  // Fetch featured hotels from database
+  const { data: featuredHotels = [], isLoading } = useQuery({
+    queryKey: ["featured-hotels"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("hotels")
+        .select(`
+          id,
+          hotel_name,
+          star_rating,
+          image_url,
+          cities (
+            city_name,
+            state
+          ),
+          rooms (
+            price_per_night
+          ),
+          hotel_amenities (
+            amenities (
+              amenity_name
+            )
+          )
+        `)
+        .limit(6);
+
+      if (error) throw error;
+
+      return data.map((hotel: any) => {
+        const minPrice = Math.min(...hotel.rooms.map((r: any) => r.price_per_night));
+        const amenitiesSet = new Set<string>();
+        hotel.hotel_amenities.forEach((ha: any) => {
+          if (ha.amenities?.amenity_name) {
+            amenitiesSet.add(ha.amenities.amenity_name);
+          }
+        });
+        const amenities = Array.from(amenitiesSet);
+        
+        return {
+          id: hotel.id,
+          name: hotel.hotel_name,
+          city: `${hotel.cities.city_name}, ${hotel.cities.state}`,
+          rating: hotel.star_rating || 5,
+          price: minPrice,
+          image: hotel.image_url,
+          amenities,
+        };
+      });
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -99,11 +119,17 @@ export default function Index() {
           </p>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {featuredHotels.map((hotel) => (
-            <HotelCard key={hotel.id} hotel={hotel} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {featuredHotels.map((hotel) => (
+              <HotelCard key={hotel.id} hotel={hotel} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Features */}
@@ -177,4 +203,6 @@ export default function Index() {
       </footer>
     </div>
   );
-}
+};
+
+export default Index;
