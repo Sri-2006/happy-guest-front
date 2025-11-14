@@ -23,8 +23,14 @@ export function SearchBar() {
       return;
     }
     
+    // Capitalize first letter of each word for better matching
+    const formattedCity = city.trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    
     // Navigate to hotels page with city filter
-    navigate(`/hotels?city=${encodeURIComponent(city.trim())}`);
+    navigate(`/hotels?city=${encodeURIComponent(formattedCity)}`);
   };
 
   return (

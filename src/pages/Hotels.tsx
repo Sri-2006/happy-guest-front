@@ -60,9 +60,9 @@ const Hotels = () => {
           )
         `);
 
-      // Filter by city
+      // Filter by city (case-insensitive)
       if (selectedCity !== "All Cities") {
-        query = query.eq("cities.city_name", selectedCity);
+        query = query.ilike("cities.city_name", selectedCity);
       }
 
       const { data, error } = await query;
